@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2023 the original author or authors.
+ * Copyright 2023-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.impl.schema.JSONSchema;
 import org.apache.pulsar.common.schema.KeyValue;
@@ -638,8 +638,8 @@ class PulsarBinderIntegrationTests implements PulsarTestContainerSupport {
 	static class BinderAndBindingPropsTestConfig {
 
 		@Bean
-		TrackingProducerFactoryBeanPostProcessor trackingProducerFactory() {
-			return new TrackingProducerFactoryBeanPostProcessor();
+		TrackingProducerFactoryBeanPostProcessor trackingProducerFactory(PulsarClient pulsarClient) {
+			return new TrackingProducerFactoryBeanPostProcessor(pulsarClient);
 		}
 
 		@Bean
@@ -651,10 +651,16 @@ class PulsarBinderIntegrationTests implements PulsarTestContainerSupport {
 
 	static class TrackingProducerFactoryBeanPostProcessor implements BeanPostProcessor {
 
+		private final PulsarClient pulsarClient;
+
+		TrackingProducerFactoryBeanPostProcessor(PulsarClient pulsarClient) {
+			this.pulsarClient = pulsarClient;
+		}
+
 		@Override
 		public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
 			if (bean instanceof DefaultPulsarProducerFactory defaultFactory) {
-				return new TrackingProducerFactory(defaultFactory);
+				return new TrackingProducerFactory(defaultFactory, this.pulsarClient);
 			}
 			return bean;
 		}
@@ -665,32 +671,58 @@ class PulsarBinderIntegrationTests implements PulsarTestContainerSupport {
 
 		private final DefaultPulsarProducerFactory<String> trackedProducerFactory;
 
+		private final PulsarClient pulsarClient;
+
 		List<Producer<String>> producersCreated = new ArrayList<>();
 
-		TrackingProducerFactory(DefaultPulsarProducerFactory<String> trackedProducerFactory) {
+		TrackingProducerFactory(DefaultPulsarProducerFactory<String> trackedProducerFactory, PulsarClient pulsarClient) {
 			this.trackedProducerFactory = trackedProducerFactory;
+			this.pulsarClient = pulsarClient;
+		}
+
+		// This is required in PulsarProducerFactory in Spring Pulsar 1.1.x (i.e. Spring Boot 3.3.x)
+		public PulsarClient getPulsarClient() {
+			return this.pulsarClient;
 		}
 
 		@Override
-		public Producer<String> createProducer(Schema<String> schema, String topic) throws PulsarClientException {
-			var producer = this.trackedProducerFactory.createProducer(schema, topic);
+		public Producer<String> createProducer(Schema<String> schema, String topic) {
+			Producer<String> producer = null;
+			try {
+				producer = this.trackedProducerFactory.createProducer(schema, topic);
+			}
+			catch (Exception e) {
+				// pass through
+			}
 			this.producersCreated.add(producer);
 			return producer;
 		}
 
 		@Override
 		public Producer<String> createProducer(Schema<String> schema, String topic,
-				ProducerBuilderCustomizer<String> customizer) throws PulsarClientException {
-			var producer = this.trackedProducerFactory.createProducer(schema, topic, customizer);
+				ProducerBuilderCustomizer<String> customizer) {
+			Producer<String> producer = null;
+			try {
+				producer = this.trackedProducerFactory.createProducer(schema, topic, customizer);
+			}
+			catch (Exception e) {
+				// pass through
+			}
 			this.producersCreated.add(producer);
 			return producer;
 		}
 
 		@Override
 		public Producer<String> createProducer(Schema<String> schema, String topic, Collection<String> encryptionKeys,
-				List<ProducerBuilderCustomizer<String>> producerBuilderCustomizers) throws PulsarClientException {
-			var producer = this.trackedProducerFactory.createProducer(schema, topic, encryptionKeys,
-					producerBuilderCustomizers);
+				List<ProducerBuilderCustomizer<String>> producerBuilderCustomizers) {
+			Producer<String> producer = null;
+			try {
+				producer = this.trackedProducerFactory.createProducer(schema, topic, encryptionKeys,
+						producerBuilderCustomizers);
+			}
+			catch (Exception e) {
+				// pass through
+			}
 			this.producersCreated.add(producer);
 			return producer;
 		}
@@ -726,9 +758,14 @@ class PulsarBinderIntegrationTests implements PulsarTestContainerSupport {
 
 		@Override
 		public org.apache.pulsar.client.api.Consumer<String> createConsumer(Schema<String> schema,
-				Collection<String> topics, String subscriptionName, ConsumerBuilderCustomizer<String> customizer)
-				throws PulsarClientException {
-			var consumer = this.trackedConsumerFactory.createConsumer(schema, topics, subscriptionName, customizer);
+				Collection<String> topics, String subscriptionName, ConsumerBuilderCustomizer<String> customizer) {
+			org.apache.pulsar.client.api.Consumer<String> consumer = null;
+			try {
+				consumer = this.trackedConsumerFactory.createConsumer(schema, topics, subscriptionName, customizer);
+			}
+			catch (Exception e) {
+				// pass through
+			}
 			this.consumersCreated.add(consumer);
 			return consumer;
 		}
@@ -736,9 +773,15 @@ class PulsarBinderIntegrationTests implements PulsarTestContainerSupport {
 		@Override
 		public org.apache.pulsar.client.api.Consumer<String> createConsumer(Schema<String> schema,
 				Collection<String> topics, String subscriptionName, Map<String, String> metadataProperties,
-				List<ConsumerBuilderCustomizer<String>> consumerBuilderCustomizers) throws PulsarClientException {
-			var consumer = this.trackedConsumerFactory.createConsumer(schema, topics, subscriptionName,
-					metadataProperties, consumerBuilderCustomizers);
+				List<ConsumerBuilderCustomizer<String>> consumerBuilderCustomizers) {
+			org.apache.pulsar.client.api.Consumer<String> consumer = null;
+			try {
+				consumer = this.trackedConsumerFactory.createConsumer(schema, topics, subscriptionName,
+						metadataProperties, consumerBuilderCustomizers);
+			}
+			catch (Exception e) {
+				// pass through
+			}
 			this.consumersCreated.add(consumer);
 			return consumer;
 		}

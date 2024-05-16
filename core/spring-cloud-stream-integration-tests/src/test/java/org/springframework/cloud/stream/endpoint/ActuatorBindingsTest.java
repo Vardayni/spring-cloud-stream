@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 the original author or authors.
+ * Copyright 2018-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,29 +46,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class ActuatorBindingsTest {
 
-	/*
-	 * Even though this test performs some simple assertions, the main purpose for it is to validate that
-	 * it does not result in recursive exception described in https://github.com/spring-cloud/spring-cloud-stream/issues/2253
-	 */
-	@Test
-	void actuatorDoesNotCauseInfiniteRecursion() {
-		try (ConfigurableApplicationContext context = new SpringApplicationBuilder(
-			TestChannelBinderConfiguration.getCompleteConfiguration(Bindings.class))
-			.web(WebApplicationType.NONE).run("--spring.jmx.enabled=false",
-				"--spring.cloud.function.definition=consume",
-				"--spring.jackson.visibility.field=ANY" // see https://github.com/spring-cloud/spring-cloud-stream/issues/2253
-				// we need the above just to verify that such action does not
-				// interfere with instance of ObjectMapper inside of BindingsLifecycleController
-			)) {
-
-			BindingsLifecycleController controller = context
-				.getBean(BindingsLifecycleController.class);
-			List<Map<?, ?>> bindings = controller.queryStates();
-			assertThat(bindings.size()).isEqualTo(1);
-			assertThat(bindings.get(0).get("bindingName")).isEqualTo("consume-in-0");
-		}
-	}
-
 	private static ClassLoader createClassLoader(String[] additionalClasspathDirectories) throws IOException {
 		URL[] urls = ObjectUtils.isEmpty(additionalClasspathDirectories) ? new URL[0]
 			: new URL[additionalClasspathDirectories.length];
@@ -81,6 +58,34 @@ class ActuatorBindingsTest {
 		return new URLClassLoader(urls,
 			ActuatorBindingsTest.class.getClassLoader());
 	}
+
+
+	/*
+	 * Even though this test performs some simple assertions, the main purpose for it is to validate that
+	 * it does not result in recursive exception described in https://github.com/spring-cloud/spring-cloud-stream/issues/2253
+	 */
+	@Test
+	void actuatorDoesNotCauseInfiniteRecursion() throws Exception {
+		ClassLoader classLoader = createClassLoader(new String[] { "binder1" });
+		try (ConfigurableApplicationContext context = new SpringApplicationBuilder(
+			TestChannelBinderConfiguration.getCompleteConfiguration(Bindings.class))
+			.resourceLoader(new DefaultResourceLoader(classLoader))
+			.web(WebApplicationType.NONE).run("--spring.jmx.enabled=false",
+				"--spring.cloud.function.definition=consume",
+				"--spring.cloud.stream.bindings.consume-in-0.binder=integration1",
+				"--spring.jackson.visibility.field=ANY" // see https://github.com/spring-cloud/spring-cloud-stream/issues/2253
+				// we need the above just to verify that such action does not
+				// interfere with instance of ObjectMapper inside of BindingsLifecycleController
+			)) {
+
+			BindingsLifecycleController controller = context
+				.getBean(BindingsLifecycleController.class);
+			List<Map<String, Object>> bindings = controller.queryStates();
+			assertThat(bindings.size()).isEqualTo(1);
+			assertThat(bindings.get(0).get("bindingName")).isEqualTo("consume-in-0");
+		}
+	}
+
 
 	// Following three tests are verifying the behavior for
 	// https://github.com/spring-cloud/spring-cloud-stream/commit/3abf06345ad1ed57dea161b35503eba107feb04a
@@ -115,7 +120,7 @@ class ActuatorBindingsTest {
 
 			BindingsLifecycleController controller = context
 				.getBean(BindingsLifecycleController.class);
-			List<Map<?, ?>> bindings = controller.queryStates();
+			List<Map<String, Object>> bindings = controller.queryStates();
 			assertThat(bindings.size()).isEqualTo(1);
 			assertThat(bindings.get(0).get("bindingName")).isEqualTo("consume-in-0");
 			assertThat(bindings.get(0).get("binderName")).isEqualTo("integration");
@@ -136,7 +141,7 @@ class ActuatorBindingsTest {
 
 			BindingsLifecycleController controller = context
 				.getBean(BindingsLifecycleController.class);
-			List<Map<?, ?>> bindings = controller.queryStates();
+			List<Map<String, Object>> bindings = controller.queryStates();
 			assertThat(bindings.size()).isEqualTo(1);
 			assertThat(bindings.get(0).get("bindingName")).isEqualTo("consume-in-0");
 			assertThat(bindings.get(0).get("binderName")).isEqualTo("integration1");

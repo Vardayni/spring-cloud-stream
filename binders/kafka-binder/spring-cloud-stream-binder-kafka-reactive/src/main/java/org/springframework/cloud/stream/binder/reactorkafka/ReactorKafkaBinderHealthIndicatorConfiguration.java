@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2022 the original author or authors.
+ * Copyright 2024-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.springframework.cloud.stream.binder.kafka.config;
+package org.springframework.cloud.stream.binder.reactorkafka;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,57 +24,43 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 
 import org.springframework.boot.actuate.autoconfigure.health.ConditionalOnEnabledHealthIndicator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.cloud.stream.binder.kafka.KafkaBinderHealth;
-import org.springframework.cloud.stream.binder.kafka.KafkaBinderHealthIndicator;
-import org.springframework.cloud.stream.binder.kafka.KafkaMessageChannelBinder;
 import org.springframework.cloud.stream.binder.kafka.properties.KafkaBinderConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.util.ObjectUtils;
-import org.springframework.util.StringUtils;
 
 /**
- * Configuration class for Kafka binder health indicator beans.
- *
- * @author Oleg Zhurakousky
- * @author Chukwubuikem Ume-Ugwa
  * @author Soby Chacko
+ * @since 4.1.2
  */
-
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(name = "org.springframework.boot.actuate.health.HealthIndicator")
 @ConditionalOnEnabledHealthIndicator("binders")
-@ConditionalOnMissingBean(KafkaBinderHealth.class)
-public class KafkaBinderHealthIndicatorConfiguration {
+public class ReactorKafkaBinderHealthIndicatorConfiguration {
 
 	@Bean
-	public KafkaBinderHealthIndicator kafkaBinderHealthIndicator(
-			KafkaMessageChannelBinder kafkaMessageChannelBinder,
-			KafkaBinderConfigurationProperties configurationProperties) {
+	public ReactorKafkaBinderHealthIndicator reactorKafkaBinderHealthIndicator(
+		ReactorKafkaBinder reactorKafkaBinder,
+		KafkaBinderConfigurationProperties configurationProperties) {
 		Map<String, Object> props = new HashMap<>();
 		props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
-				ByteArrayDeserializer.class);
+			ByteArrayDeserializer.class);
 		props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-				ByteArrayDeserializer.class);
+			ByteArrayDeserializer.class);
 		Map<String, Object> mergedConfig = configurationProperties
-				.mergedConsumerConfiguration();
+			.mergedConsumerConfiguration();
 		if (!ObjectUtils.isEmpty(mergedConfig)) {
 			props.putAll(mergedConfig);
 		}
 		if (!props.containsKey(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG)) {
 			props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-					configurationProperties.getKafkaConnectionString());
-		}
-		String healthIndicatorConsumerGroup = configurationProperties.getHealthIndicatorConsumerGroup();
-		if (StringUtils.hasText(healthIndicatorConsumerGroup)) {
-			props.put(ConsumerConfig.GROUP_ID_CONFIG, healthIndicatorConsumerGroup);
+				configurationProperties.getKafkaConnectionString());
 		}
 		ConsumerFactory<?, ?> consumerFactory = new DefaultKafkaConsumerFactory<>(props);
-		KafkaBinderHealthIndicator indicator = new KafkaBinderHealthIndicator(
-				kafkaMessageChannelBinder, consumerFactory);
+		ReactorKafkaBinderHealthIndicator indicator = new ReactorKafkaBinderHealthIndicator(
+			reactorKafkaBinder, consumerFactory);
 		indicator.setTimeout(configurationProperties.getHealthTimeout());
 		indicator.setConsiderDownWhenAnyPartitionHasNoLeader(configurationProperties.isConsiderDownWhenAnyPartitionHasNoLeader());
 		return indicator;
